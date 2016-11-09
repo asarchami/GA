@@ -1,0 +1,53 @@
+
+# Accessing the news feed content in R
+library(XML)
+library(RCurl)
+# Find the big deviations and find if there are related news and vice versa
+
+# We will read data from the master source file of RICS
+Tickers = read.csv('C:\\Anant\\MyLearning\\Statistics\\SpreadAnalysis\\WorldTickerList.csv')
+
+# For now we will take the example of GOOGLE in that list
+Tickers = Tickers[Tickers$TICKER=='GOOG',]
+
+# We will use the Ticker value and download data from Yahoo Finance
+# You can also customise the date ranges
+URL = paste(c('http://real-chart.finance.yahoo.com/table.csv?s=',as.character(Tickers$TICKER),'&a=00&b=01&c=2015&d=08&e=30&f=2015&g=d&ignore=.csv'),collapse="")
+GOOG = read.csv(URL)
+
+GOOG$OpenHighSpread = GOOG$High - GOOG$Open
+GOOG$LowHighSpread = GOOG$High - GOOG$Low
+GOOG$OpenHigh = (GOOG$OpenHighSpread - mean(GOOG$OpenHighSpread))/sd(GOOG$OpenHighSpread)
+GOOG$LowHigh = (GOOG$LowHighSpread - mean(GOOG$LowHighSpread))/sd(GOOG$LowHighSpread)
+
+MajorPoints = GOOG[GOOG$OpenHigh < -3 | GOOG$OpenHigh > 3,]
+
+# We see that there were 4 dates when there was a lot of deviation in the Open High
+# There must have been some news around these dates
+
+#############################################################################################
+# Source 1 : GOOGLE
+
+#############################################################################################
+# source 2 Reuters
+for(dateValue in MajorPoints$Date)
+{
+  newsDateURL = paste(c('http://www.reuters.com/finance/stocks/companyNews?symbol=GOOG.O&date=',format(as.Date(dateValue,"%Y-%m-%d"),"%m%d%Y")),collapse="")
+  #newsDateURL = paste(c(newsURL,'&startdate=',dateValue,'&enddate=',dateValue),collapse="")
+  print(newsDateURL)
+  doc = getURL(newsDateURL)
+  doc = htmlParse(doc)
+  news = xpathSApply(doc,'//div[@id = "companyNews"]/div/div/div/p')
+}
+
+#############################################################################################
+# Source 3 Google
+for(dateValue in MajorPoints$Date)
+{
+  newsDateURL = paste(c('http://finance.yahoo.com/q/h?s=',as.character(Tickers$TICKER),'&t',as.character(dateValue)),collapse="")
+  #newsDateURL = paste(c(newsURL,'&startdate=',dateValue,'&enddate=',dateValue),collapse="")
+  print(newsDateURL)
+  doc = getURL(newsDateURL)
+  doc = htmlParse(doc)
+  news = xpathSApply(doc,'//div[@class = "mod yfi_quote_headline withsky"]/ul/li//a')
+}

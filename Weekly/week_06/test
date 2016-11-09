@@ -1,0 +1,32 @@
+digraph Tree {
+node [shape=box] ;
+0 [label="miles <= 108000.0\nmse = 22375555.5556\nsamples = 9\nvalue = 6366.6667"] ;
+1 [label="year <= 2009.5\nmse = 4671875.0\nsamples = 4\nvalue = 11375.0"] ;
+0 -> 1 [labeldistance=2.5, labelangle=45, headlabel="True"] ;
+2 [label="year <= 2008.0\nmse = 62500.0\nsamples = 2\nvalue = 9250.0"] ;
+1 -> 2 ;
+3 [label="mse = 0.0\nsamples = 1\nvalue = 9000.0"] ;
+2 -> 3 ;
+4 [label="mse = 0.0\nsamples = 1\nvalue = 9500.0"] ;
+2 -> 4 ;
+5 [label="doors <= 3.0\nmse = 250000.0\nsamples = 2\nvalue = 13500.0"] ;
+1 -> 5 ;
+6 [label="mse = 0.0\nsamples = 1\nvalue = 14000.0"] ;
+5 -> 6 ;
+7 [label="mse = 0.0\nsamples = 1\nvalue = 13000.0"] ;
+5 -> 7 ;
+8 [label="year <= 2000.0\nmse = 418400.0\nsamples = 5\nvalue = 2360.0"] ;
+0 -> 8 [labeldistance=2.5, labelangle=-45, headlabel="False"] ;
+9 [label="mse = 0.0\nsamples = 1\nvalue = 1300.0"] ;
+8 -> 9 ;
+10 [label="miles <= 183500.0\nmse = 171875.0\nsamples = 4\nvalue = 2625.0"] ;
+8 -> 10 ;
+11 [label="mse = 0.0\nsamples = 2\nvalue = 3000.0"] ;
+10 -> 11 ;
+12 [label="doors <= 3.0\nmse = 62500.0\nsamples = 2\nvalue = 2250.0"] ;
+10 -> 12 ;
+13 [label="mse = 0.0\nsamples = 1\nvalue = 2500.0"] ;
+12 -> 13 ;
+14 [label="mse = 0.0\nsamples = 1\nvalue = 2000.0"] ;
+12 -> 14 ;
+}
