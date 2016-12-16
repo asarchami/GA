@@ -8,8 +8,24 @@ from time import sleep
 import os.path
 import re
 import glob
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
-from pandas_datareader import data, wb
+import matplotlib.pyplot as plt
+
+from sklearn.linear_model import LinearRegression, ElasticNetCV, RidgeCV, LassoCV
+# from sklearn.cross_validation import train_test_split
+from sklearn.cross_validation import StratifiedKFold, cross_val_score, train_test_split
+from sklearn.metrics import explained_variance_score, mean_absolute_error, silhouette_score
+from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.grid_search import GridSearchCV
+
+from sklearn.externals import joblib
+
+import pydot
+from IPython.display import Image
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 
 def get_companies():
     # This function downloads list of S&P 500 from wikipedia and
@@ -24,7 +40,8 @@ def get_companies():
     else:
         companies = pd.read_csv('datasets/s_p_500.csv', index_col=0)
 
-    companies.columns = [x.strip().replace(' ', '_') for x in companies.columns]
+    companies.columns = [x.strip().replace(
+        ' ', '_') for x in companies.columns]
     companies.Ticker_symbol = companies.Ticker_symbol.apply(
         lambda x: x.replace('-', ''))
     return companies
@@ -67,7 +84,8 @@ def get_articles_for_symbol(symbol,
                             start_date=date(2014, 1, 1),
                             end_date=date(2014, 2, 1)):
     # gets articles for a symbol from start_date to end_date
-    days = [start_date + timedelta(n) for n in range((end_date - start_date).days)]
+    days = [start_date + timedelta(n) for n in range(
+        (end_date - start_date).days)]
     articles = []
     for day in days:
         url = "http://www.reuters.com/finance/stocks/companyNews?symbol={}&date={}".format(
@@ -216,3 +234,157 @@ def update_quotes(articles, reset=False):
     print "New downloaded symbol quotes: ", len(not_downloaded)
     quotes = pd.read_csv('datasets/daily_quotes.csv', encoding='utf8')
     return quotes
+
+
+def merge_dicts(x, y):
+    """Given two dicts, merge them into a new dict as a shallow copy."""
+    z = x.copy()
+    z.update(y)
+    return z
+
+
+def CV(target):
+    return StratifiedKFold(target, n_folds=3,
+                           shuffle=True, random_state=41)
+
+
+def grid_search(model, params, cv):
+    return GridSearchCV(estimator=model,
+                        param_grid=params,
+                        cv=cv)
+
+
+def regression_results(model, x_true, y_true, y_pred):
+    ret = {}
+    ret["Explained variance regression score"] = explained_variance_score(
+        y_true, y_pred, multioutput='uniform_average')
+    ret["Mean Absolute Error"] = mean_absolute_error(
+        y_true, y_pred)
+    ret["Model socre"] = model.score(
+        x_true, y_true)
+    return ret
+
+
+def draw_feature_importance(model, data):
+    importances = model.feature_importances_
+    std = np.std(
+        [tree.feature_importances_ for tree in model.estimators_], axis=0)
+    indices = np.argsort(importances)[::-1]
+    feature_names = data.columns
+    # Plot the feature importances of the model
+    plt.figure(figsize=(20, 15))
+    plt.title("Feature importances")
+    plt.bar(range(data.shape[1]), importances[indices],
+            color="r", yerr=std[indices], align="center")
+    plt.xticks(range(data.shape[1]), feature_names[indices], rotation=90)
+    plt.xlim([-1, data.shape[1]])
+    return plt
+
+
+def model_test_metrics(model, data, target):
+    ret = {}
+    ret["Test Data score"] = model.fit(data, target).score(data, target)
+    return merge_dicts(ret, regression_results(target, model.predict(data)))
+
+
+def evaluate_model(model, data, target,
+                   params=None, draw_features=True, verbose=True):
+    train_data, test_data, train_target, test_target = train_test_split(
+        data, target)
+#     cv=CV(train_target)
+    cv = 3
+    ret = {}
+    if params:
+        grid = grid_search(model, params, cv)
+
+        grid.fit(train_data, train_target)
+        model = grid.best_estimator_
+    else:
+        model.fit(train_data, train_target)
+
+    s = cross_val_score(model, train_data, train_target, cv=cv, n_jobs=-1)
+    ret["Mean cross validation score"] = s.mean()
+    predictions = model.predict(test_data)
+    ret = merge_dicts(ret, regression_results(
+        model, test_data, test_target, predictions))
+
+    if draw_features:
+        draw_feature_importance(model, train_data)
+    return model, ret
+
+
+def linear_regression(data, target):
+    params = {
+        'fit_intercept': [False, True]
+    }
+    return evaluate_model(LinearRegression(n_jobs=-1),
+                          data, target,
+                          draw_features=False,
+                          params=params)
+
+
+def ridge_cv(data, target):
+    return evaluate_model(
+        RidgeCV(alphas=[0.1, .5, 1.0, 5.0, 10.0, 100.0], normalize=True),
+        data, target, draw_features=False)
+
+
+def random_forest(data, target, draw_features=False):
+    params = {
+        'n_estimators': [10, 20, 50, 100, 200],
+        'max_depth': [1, 2, 3, 4, 5],
+        'min_samples_split': [2, 10, 25, 50, 100],
+    }
+    return evaluate_model(RandomForestRegressor(n_jobs=-1),
+                          data, target,
+                          params=params, draw_features=draw_features)
+
+
+def extra_trees(data, target, draw_features=False):
+    params = {
+        'n_estimators': [10, 20, 50, 100, 200],
+        'max_depth': [1, 2, 3, 4, 5],
+        'min_samples_split': [2, 10, 25, 50, 100],
+    }
+    return evaluate_model(ExtraTreesRegressor(n_jobs=-1),
+                          data, target,
+                          params=params, draw_features=draw_features)
+
+
+def print_model_report(report, score=None, model=None):
+    if model:
+        print model, "\n"
+    for title, value in report.iteritems():
+        print "{:<50}{}".format(title, value)
+    if score:
+        print "\n", "{:<50}{}".format('score for test data', score)
+
+
+def plot_predicted_measured(ax, y_real, predictions, fontsize=24, title=''):
+    ax.scatter(y_real, predictions)
+    ax.plot([predictions.min(), predictions.max()],
+            [predictions.min(), predictions.max()], 'k--', lw=2)
+    ax.set_xlabel('Measured')
+    ax.set_ylabel('Predicted')
+    ax.set_title(title, fontsize=fontsize)
+
+
+def set_style():
+    plt.style.use(['seaborn-white', 'seaborn-paper'])
+
+
+def plot_comparisions(y_real, y_lr, y_rd, y_rf, y_et):
+    set_style()
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2)
+    fig.set_figheight(12)
+    fig.set_figwidth(12)
+    plot_predicted_measured(
+        ax1, y_real, y_lr, fontsize=16, title='Linear Regression')
+    plot_predicted_measured(
+        ax2, y_real, y_rd, fontsize=16, title='RidgeCV')
+    plot_predicted_measured(
+        ax3, y_real, y_rf, fontsize=16, title='Random Forest')
+    plot_predicted_measured(
+        ax4, y_real, y_et, fontsize=16, title='Extra Trees')
+
+    plt.show()
